@@ -105,6 +105,9 @@ pub struct AllDevices {
     pub display: AxDeviceContainer<AxDisplayDevice>,
 }
 
+#[cfg(feature = "img")]
+core::arch::global_asm!(include_str!("../image.S"));
+
 impl AllDevices {
     /// Returns the device model used, either `dyn` or `static`.
     ///
