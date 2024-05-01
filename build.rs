@@ -23,7 +23,7 @@ fn enable_cfg(key: &str, value: &str) {
 #[cfg(feature = "img")]
 fn new_fs_img() -> Result<()> {
     let mut f = File::create("./image.S").unwrap();
-    let img_path = "./disk.img";
+    let img_path = std::env::var("AX_WORK_DIR").unwrap() + "/disk.img";
     writeln!(
         f,
         r#"
