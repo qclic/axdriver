@@ -32,7 +32,7 @@ ixgbe = ["net", "driver_net/ixgbe", "dep:axalloc", "dep:axhal"]
 
 img = ["ramdisk", "dep:axconfig"]
 
-default = ["bus-mmio"]
+default = ["bus-pci"]
 
 [dependencies]
 log = "0.4"
