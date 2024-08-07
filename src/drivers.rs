@@ -130,3 +130,75 @@ cfg_if::cfg_if! {
         }
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(net_dev = "e1000")] {
+        use axalloc::global_allocator;
+        use axhal::mem::{phys_to_virt, virt_to_phys};
+        use driver_net::e1000::{E1000Nic, KernelFunc};
+        use core::alloc::Layout;
+
+        pub struct KernelFuncObj;
+        impl KernelFunc for KernelFuncObj {
+            /// Allocate consequent physical memory for DMA;
+            /// Return (cpu virtual address, dma physical address) which is page aligned.
+            //fn dma_alloc_coherent(pages: usize) -> usize;
+            fn dma_alloc_coherent(&mut self, pages: usize) -> (usize, usize) {
+            let vaddr = if let Ok(start_vaddr) = global_allocator().alloc_pages(pages, Self::PAGE_SIZE) {
+                        start_vaddr
+                } else {
+                    error!("failed to alloc pages");
+                    return (0, 0);
+                };
+                let paddr = virt_to_phys((vaddr).into());
+                info!("dma_alloc_coherent pages @ vaddr={:#x}, paddr={:#x}", vaddr, paddr);
+                (vaddr, paddr.as_usize())
+            }
+
+            /// Deallocate DMA memory by virtual address
+            fn dma_free_coherent(&mut self, vaddr: usize, pages: usize) {
+                global_allocator().dealloc_pages(vaddr, pages);
+            }
+        }
+
+        pub struct E1000Driver;
+        register_net_driver!(E1000Driver, driver_net::e1000::E1000Nic<'static, KernelFuncObj>);
+
+
+        impl DriverProbe for E1000Driver {
+            fn probe_pci(
+                    root: &mut driver_pci::PciRoot,
+                    bdf: driver_pci::DeviceFunction,
+                    dev_info: &driver_pci::DeviceFunctionInfo,
+                ) -> Option<crate::AxDeviceEnum> {
+                    const E1000_VENDOR_ID: u16 = 0x8086;
+                    const E1000_DEVICE_ID: u16 = 0x100e;
+                    info!("PCI vendor:device = {:#x}:{:#x}", dev_info.vendor_id, dev_info.device_id);
+                    if dev_info.vendor_id == E1000_VENDOR_ID && dev_info.device_id == E1000_DEVICE_ID {
+                        info!("E1000 PCI device found at {:?}", bdf);
+
+                        // Initialize the device
+                        match root.bar_info(bdf, 0).unwrap() {
+                            driver_pci::BarInfo::Memory {
+                                address,
+                                ..
+                            } => {
+                                let kfn = KernelFuncObj;
+                                let nic = E1000Nic::<KernelFuncObj>::init(
+                                    kfn,
+                                    phys_to_virt((address as usize).into()).into()
+                                )
+                                .expect("failed to initialize e1000 device");
+                                return Some(AxDeviceEnum::from_net(nic));
+                            }
+                            driver_pci::BarInfo::IO { .. } => {
+                                error!("e1000: BAR0 is of I/O type");
+                                return None;
+                            }
+                        }
+                    }
+                    None
+            }
+        }
+    }
+}

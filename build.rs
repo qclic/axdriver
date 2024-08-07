@@ -4,7 +4,7 @@ use std::{
     io::{Result, Write},
 };
 
-const NET_DEV_FEATURES: &[&str] = &["ixgbe", "virtio-net"];
+const NET_DEV_FEATURES: &[&str] = &["e1000", "ixgbe", "virtio-net"];
 const BLOCK_DEV_FEATURES: &[&str] = &["ramdisk", "bcm2835-sdhci", "virtio-blk"];
 const DISPLAY_DEV_FEATURES: &[&str] = &["virtio-gpu"];
 
