@@ -23,21 +23,26 @@ fn config_pci_device(
         {
             // if the BAR address is not assigned, call the allocator and assign it.
             if size > 0 && address == 0 {
-                let new_addr = allocator
-                    .as_mut()
-                    .expect("No memory ranges available for PCI BARs!")
-                    .alloc(size as _)
-                    .ok_or(DevError::NoMemory)?;
-                if address_type == MemoryBarType::Width32 {
-                    root.set_bar_32(bdf, bar, new_addr as _);
-                } else if address_type == MemoryBarType::Width64 {
-                    root.set_bar_64(bdf, bar, new_addr);
+                // let new_addr = allocator
+                //     .as_mut()
+                //     .expect("No memory ranges available for PCI BARs!")
+                //     .alloc(size as _)
+                //     .ok_or(DevError::NoMemory)?;
+                // if address_type == MemoryBarType::Width32 {
+                //     root.set_bar_32(bdf, bar, new_addr as _);
+                // } else if address_type == MemoryBarType::Width64 {
+                //     root.set_bar_64(bdf, bar, new_addr);
+                // }
+                bar += 1;
+                if info.takes_two_entries() {
+                    bar += 1;
                 }
+                continue;
             }
         }
 
         // read the BAR info again after assignment.
-        let info = root.bar_info(bdf, bar).unwrap();
+        let info: BarInfo = root.bar_info(bdf, bar).unwrap();
         match info {
             BarInfo::IO { address, size } => {
                 if address > 0 && size > 0 {
