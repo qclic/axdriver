@@ -172,7 +172,10 @@ cfg_if::cfg_if! {
                     dev_info: &driver_pci::DeviceFunctionInfo,
                 ) -> Option<crate::AxDeviceEnum> {
                     const E1000_VENDOR_ID: u16 = 0x8086;
-                    const E1000_DEVICE_ID: u16 = 0x100e;
+                    const E1000_DEVICE_ID: u16 = 0x15fc;
+                    // for qemu
+                    // const E1000_DEVICE_ID: u16 = 0x100e;
+
                     info!("PCI vendor:device = {:#x}:{:#x}", dev_info.vendor_id, dev_info.device_id);
                     if dev_info.vendor_id == E1000_VENDOR_ID && dev_info.device_id == E1000_DEVICE_ID {
                         info!("E1000 PCI device found at {:?}", bdf);
