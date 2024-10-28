@@ -60,8 +60,6 @@
 
 #[macro_use]
 extern crate log;
-
-#[cfg(feature = "dyn")]
 extern crate alloc;
 
 #[macro_use]
@@ -77,6 +75,8 @@ mod virtio;
 
 #[cfg(feature = "ixgbe")]
 mod ixgbe;
+#[cfg(feature = "e1000")]
+mod e1000e;
 
 pub mod prelude;
 

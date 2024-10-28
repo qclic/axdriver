@@ -12,6 +12,8 @@ use crate::virtio::{self, VirtIoDevMeta};
 
 #[cfg(feature = "bus-pci")]
 use driver_pci::{DeviceFunction, DeviceFunctionInfo, PciRoot};
+#[cfg(feature = "bus-pci")]
+use pcie::{Chip, PciDevice, RootComplex};
 
 pub use super::dummy::*;
 
@@ -31,6 +33,16 @@ pub trait DriverProbe {
         _bdf: DeviceFunction,
         _dev_info: &DeviceFunctionInfo,
     ) -> Option<AxDeviceEnum> {
+        None
+    }
+
+    #[cfg(bus = "pci")]
+    fn probe_pcie<C: Chip>(
+        _root: &mut RootComplex<C>,
+        _ep: Arc<pcie::Endpoint<C>>,
+    ) -> Option<AxDeviceEnum> {
+        use pcie::{Chip, RootComplex};
+
         None
     }
 }
@@ -132,74 +144,41 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(net_dev = "e1000")] {
-        use axalloc::global_allocator;
-        use axhal::mem::{phys_to_virt, virt_to_phys};
-        use driver_net::e1000::{E1000Nic, KernelFunc};
-        use core::alloc::Layout;
-
-        pub struct KernelFuncObj;
-        impl KernelFunc for KernelFuncObj {
-            /// Allocate consequent physical memory for DMA;
-            /// Return (cpu virtual address, dma physical address) which is page aligned.
-            //fn dma_alloc_coherent(pages: usize) -> usize;
-            fn dma_alloc_coherent(&mut self, pages: usize) -> (usize, usize) {
-            let vaddr = if let Ok(start_vaddr) = global_allocator().alloc_pages(pages, Self::PAGE_SIZE) {
-                        start_vaddr
-                } else {
-                    error!("failed to alloc pages");
-                    return (0, 0);
-                };
-                let paddr = virt_to_phys((vaddr).into());
-                info!("dma_alloc_coherent pages @ vaddr={:#x}, paddr={:#x}", vaddr, paddr);
-                (vaddr, paddr.as_usize())
-            }
-
-            /// Deallocate DMA memory by virtual address
-            fn dma_free_coherent(&mut self, vaddr: usize, pages: usize) {
-                global_allocator().dealloc_pages(vaddr, pages);
-            }
-        }
-
-        pub struct E1000Driver;
-        register_net_driver!(E1000Driver, driver_net::e1000::E1000Nic<'static, KernelFuncObj>);
-
-
-        impl DriverProbe for E1000Driver {
-            fn probe_pci(
-                    root: &mut driver_pci::PciRoot,
-                    bdf: driver_pci::DeviceFunction,
-                    dev_info: &driver_pci::DeviceFunctionInfo,
-                ) -> Option<crate::AxDeviceEnum> {
-                    const E1000_VENDOR_ID: u16 = 0x8086;
-                    let device_id_list = [0x15fc, 0x0DC8, 0x100e];
-
-                    info!("PCI vendor:device = {:#x}:{:#x}", dev_info.vendor_id, dev_info.device_id);
-                    if dev_info.vendor_id == E1000_VENDOR_ID &&  device_id_list.contains(&dev_info.device_id) {
-                        info!("E1000 PCI device found at {:?}", bdf);
-
-                        // Initialize the device
-                        match root.bar_info(bdf, 0).unwrap() {
-                            driver_pci::BarInfo::Memory {
-                                address,
-                                ..
-                            } => {
-                                let kfn = KernelFuncObj;
-                                let nic = E1000Nic::<KernelFuncObj>::init(
-                                    kfn,
-                                    phys_to_virt((address as usize).into()).into()
-                                )
-                                .expect("failed to initialize e1000 device");
-                                return Some(AxDeviceEnum::from_net(nic));
-                            }
-                            driver_pci::BarInfo::IO { .. } => {
-                                error!("e1000: BAR0 is of I/O type");
-                                return None;
-                            }
-                        }
-                    }
-                    None
-            }
-        }
+if #[cfg(net_dev = "e1000")] {
+use axhal::mem::phys_to_virt;
+use alloc::sync::Arc;
+use crate::e1000e::E1000E;
+        use pcie::preludes::*;
+pub struct E1000Driver;
+register_net_driver!(E1000Driver, E1000E);
+impl DriverProbe for E1000Driver {
+    #[cfg(bus = "pci")]
+    fn probe_pci(
+        root: &mut PciRoot,
+        bdf: DeviceFunction,
+        dev_info: &DeviceFunctionInfo,
+    ) -> Option<crate::AxDeviceEnum> {
+        info!("check e1000");
+        None
     }
+    #[cfg(bus = "pci")]
+    fn probe_pcie<C: Chip>(
+        _root: &mut RootComplex<C>,
+        dev: Arc< pcie::Endpoint<C>>,
+    ) -> Option<AxDeviceEnum> {
+        let (vid, did) = dev.id();
+        let device_id_list = [0x10D3, 0x0DC8];
+
+        if vid == 0x8086 && device_id_list.contains( &did) {
+            info!("E1000E PCI device found at {:?}", dev.address());
+            // Initialize the device
+            // These can be changed according to the requirments specified in the ixgbe init function.
+            let e1000 = E1000E::new(dev);
+            return Some(AxDeviceEnum::from_net(e1000));
+        }
+
+        None
+    }
+}
+}
 }

@@ -2,7 +2,10 @@
 name = "axdriver"
 version = "0.1.0"
 edition = "2021"
-authors = ["Yuekai Jia <equation618@gmail.com>", "ChengXiang Qi <kuangjux@outlook.com>"]
+authors = [
+    "Yuekai Jia <equation618@gmail.com>",
+    "ChengXiang Qi <kuangjux@outlook.com>",
+]
 description = "ArceOS device drivers"
 license = "GPL-3.0-or-later OR Apache-2.0"
 homepage = "https://github.com/rcore-os/arceos"
@@ -13,7 +16,7 @@ keywords = ["Starry"]
 [features]
 dyn = []
 bus-mmio = []
-bus-pci = ["dep:driver_pci", "dep:axhal", "dep:axconfig"]
+bus-pci = ["dep:driver_pci", "dep:pcie", "dep:axhal", "dep:axconfig"]
 net = ["driver_net"]
 block = ["driver_block"]
 display = ["driver_display"]
@@ -28,7 +31,7 @@ virtio-gpu = ["display", "virtio", "driver_virtio/gpu"]
 ramdisk = ["block", "driver_block/ramdisk"]
 bcm2835-sdhci = ["block", "driver_block/bcm2835-sdhci"]
 ixgbe = ["net", "driver_net/ixgbe", "dep:axalloc", "dep:axhal"]
-e1000 = ["net", "driver_net/e1000", "dep:axalloc", "dep:axhal"]
+e1000 = ["net", "e1000-driver", "dep:axalloc", "dep:axhal", "bus-pci"]
 
 img = ["ramdisk", "dep:axconfig"]
 
@@ -37,6 +40,7 @@ default = ["bus-pci"]
 [dependencies]
 log = "0.4"
 cfg-if = "1.0"
+kspin = { version = "0" }
 driver_common = { git = "https://github.com/Starry-OS/driver_common.git" }
 driver_block = { git = "https://github.com/Starry-OS/driver_block.git", optional = true }
 driver_net = { git = "https://github.com/Starry-OS/driver_net.git", optional = true }
@@ -46,3 +50,5 @@ driver_virtio = { git = "https://github.com/Starry-OS/driver_virtio.git", option
 axalloc = { git = "https://github.com/Starry-OS/axalloc.git", optional = true }
 axhal = { git = "https://github.com/Starry-OS/axhal.git", optional = true }
 axconfig = { git = "https://github.com/Starry-OS/axconfig.git", optional = true }
+e1000-driver = { git = "https://gitee.com/zr233/e1000-rust.git", tag = "v0.2.5", optional = true }
+pcie = { git = "https://gitee.com/zr233/pcie", optional = true }
