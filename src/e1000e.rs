@@ -1,6 +1,6 @@
 use core::{alloc::Layout, mem, ptr::NonNull};
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{boxed::Box, collections::vec_deque::VecDeque, sync::Arc, vec::Vec};
 
 use axalloc::global_allocator;
 
@@ -15,9 +15,12 @@ use e1000_driver::e1000::{
 use kspin::SpinNoIrq;
 use pcie::preludes::*;
 
+const QS: usize = 64;
+
 pub struct E1000E {
     inner: SpinNoIrq<E1000>,
     mac: MacAddress,
+    rx_buffer_queue: VecDeque<NetBufPtr>,
 }
 
 unsafe impl Send for E1000E {}
@@ -49,21 +52,12 @@ impl E1000E {
 
         let settings = net_dev_settings;
         e1000.open(settings).unwrap();
-
-        // pcie.capabilities()
-        //     .filter_map(|cap| {
-        //         if let PciCapability::MsiX(mut msi) = cap {
-        //             msi.set_enabled(true, pcie.as_ref());
-        //             Some(())
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .last();
+        let rx_buffer_queue = VecDeque::with_capacity(QS);
 
         Self {
             inner: SpinNoIrq::new(e1000),
             mac,
+            rx_buffer_queue,
         }
     }
 }
@@ -103,21 +97,16 @@ impl NetDriverOps for E1000E {
     }
 
     fn rx_queue_size(&self) -> usize {
-        256
+        QS
     }
 
     fn tx_queue_size(&self) -> usize {
-        256
+        QS
     }
 
     fn recycle_rx_buffer(&mut self, rx_buf: NetBufPtr) -> DevResult {
         unsafe {
-            let vec = Vec::from_raw_parts(
-                rx_buf.raw_ptr::<u8>(),
-                rx_buf.packet_len(),
-                rx_buf.packet_len(),
-            );
-            drop(vec);
+            drop(Box::from_raw(rx_buf.raw_ptr::<Vec<u8>>()));
         }
         Ok(())
     }
@@ -127,7 +116,8 @@ impl NetDriverOps for E1000E {
     }
 
     fn transmit(&mut self, mut tx_buf: NetBufPtr) -> DevResult {
-        self.inner
+        let r = self
+            .inner
             .lock()
             .xmit(
                 E1000XmitConfig {
@@ -140,31 +130,52 @@ impl NetDriverOps for E1000E {
                 tx_buf.packet_mut(),
             )
             .inspect_err(|e| warn!("xmit {}", e))
-            .map_err(|_e| DevError::Again)?;
+            .map_err(|_e| DevError::Again);
 
+        unsafe {
+            drop(Box::from_raw(tx_buf.raw_ptr::<Vec<u8>>()));
+        }
+        r?;
         Ok(())
     }
 
     fn receive(&mut self) -> DevResult<NetBufPtr> {
-        let mut e1000 = self.inner.lock();
-        e1000.clean_tx_irq();
-        let pks = e1000.clean_rx_irq(64);
-        if pks.len() >= 1 {
-            let mut src = pks[0].data.to_vec();
-            let len = src.len();
-            src.shrink_to_fit();
-            let ptr = NonNull::new(src.as_mut_ptr()).unwrap();
-            mem::forget(src);
-            Ok(NetBufPtr::new(ptr, ptr, len))
+        if !self.rx_buffer_queue.is_empty() {
+            // RX buffer have received packets.
+            Ok(self.rx_buffer_queue.pop_front().unwrap())
         } else {
-            Err(DevError::Again)
+            let mut e1000 = self.inner.lock();
+            e1000.clean_tx_irq();
+            let pks = e1000.clean_rx_irq(64);
+            if !pks.is_empty() {
+                for packet in pks {
+                    let src = packet.data.to_vec();
+                    let size = src.len();
+                    let mut tx_buf = Box::new(src);
+                    let tx_buf_ptr = tx_buf.as_mut_ptr();
+
+                    self.rx_buffer_queue.push_back(NetBufPtr::new(
+                        NonNull::new(Box::into_raw(tx_buf) as *mut u8).unwrap(),
+                        NonNull::new(tx_buf_ptr).unwrap(),
+                        size,
+                    ));
+                }
+                Ok(self.rx_buffer_queue.pop_front().unwrap())
+            } else {
+                Err(DevError::Again)
+            }
         }
     }
 
     fn alloc_tx_buffer(&mut self, size: usize) -> DevResult<NetBufPtr> {
-        let data = unsafe { global_allocator().alloc(Layout::from_size_align_unchecked(size, 64)) }
-            .unwrap();
-        Ok(NetBufPtr::new(data, data, size))
+        let mut tx_buf = Box::new(alloc::vec![0; size]);
+        let tx_buf_ptr = tx_buf.as_mut_ptr();
+
+        Ok(NetBufPtr::new(
+            NonNull::new(Box::into_raw(tx_buf) as *mut u8).unwrap(),
+            NonNull::new(tx_buf_ptr).unwrap(),
+            size,
+        ))
     }
 }
 
