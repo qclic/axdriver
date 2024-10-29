@@ -160,10 +160,24 @@ pub fn init_drivers() -> AllDevices {
     #[cfg(feature = "img")]
     {
         use axconfig::{PHYS_VIRT_OFFSET, TESTCASE_MEMORY_SIZE, TESTCASE_MEMORY_START};
+        use driver_block::ramdisk::BLOCK_SIZE;
         let mut ram_disk = driver_block::ramdisk::RamDisk::new(TESTCASE_MEMORY_SIZE);
-        unsafe {
-            ram_disk.copy_from_slice((TESTCASE_MEMORY_START + PHYS_VIRT_OFFSET) as *const u8)
-        };
+        let mut buf = [0u8; BLOCK_SIZE];
+        let block_num = (TESTCASE_MEMORY_SIZE / BLOCK_SIZE) as u64;
+        for i in 0..block_num {
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    (TESTCASE_MEMORY_START + PHYS_VIRT_OFFSET + i as usize * BLOCK_SIZE)
+                        as *const u8,
+                    buf.as_mut_ptr(),
+                    BLOCK_SIZE,
+                );
+            }
+            ram_disk.write_block(i, &buf).unwrap();
+        }
+        // unsafe {
+        //     ram_disk.copy_from_slice((TESTCASE_MEMORY_START + PHYS_VIRT_OFFSET) as *const u8)
+        // };
         all_devs.add_device(AxDeviceEnum::from_block(ram_disk));
     }
 
