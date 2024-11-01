@@ -39,7 +39,7 @@ pub trait DriverProbe {
     #[cfg(bus = "pci")]
     fn probe_pcie<C: Chip>(
         _root: &mut RootComplex<C>,
-        _ep: Arc<pcie::Endpoint<C>>,
+        _ep: alloc::sync::Arc<pcie::Endpoint<C>>,
     ) -> Option<AxDeviceEnum> {
         use pcie::{Chip, RootComplex};
 
@@ -154,9 +154,9 @@ register_net_driver!(E1000Driver, E1000E);
 impl DriverProbe for E1000Driver {
     #[cfg(bus = "pci")]
     fn probe_pci(
-        root: &mut PciRoot,
-        bdf: DeviceFunction,
-        dev_info: &DeviceFunctionInfo,
+        _root: &mut PciRoot,
+        _bdf: DeviceFunction,
+        _dev_info: &DeviceFunctionInfo,
     ) -> Option<crate::AxDeviceEnum> {
         info!("check e1000");
         None
@@ -164,7 +164,7 @@ impl DriverProbe for E1000Driver {
     #[cfg(bus = "pci")]
     fn probe_pcie<C: Chip>(
         _root: &mut RootComplex<C>,
-        dev: Arc< pcie::Endpoint<C>>,
+        dev: alloc::sync::Arc< pcie::Endpoint<C>>,
     ) -> Option<AxDeviceEnum> {
         let (vid, did) = dev.id();
         let device_id_list = [0x10D3, 0x0DC8];

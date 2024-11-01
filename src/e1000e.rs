@@ -1,4 +1,4 @@
-use core::{alloc::Layout, mem, ptr::NonNull};
+use core::{alloc::Layout, ptr::NonNull};
 
 use alloc::{boxed::Box, collections::vec_deque::VecDeque, sync::Arc, vec::Vec};
 
@@ -241,7 +241,7 @@ impl<C: Chip> KernelFunc for KFun<C> {
 
     fn enable_net(&self) {}
 
-    fn on_xmit_completed(&self, pkts: u32, bytes: u32) {}
+    fn on_xmit_completed(&self, _pkts: u32, _bytes: u32) {}
 
-    fn iounmap(&self, addr: usize) {}
+    fn iounmap(&self, _addr: usize) {}
 }
